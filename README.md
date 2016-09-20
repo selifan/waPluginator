@@ -19,6 +19,7 @@ So this library was written to give a "little help" in creating plugin stubs for
 * If you're planning to use less source files and want them to be compiled to css, you have to download current version of lessc.inc.php library from [github](https://github.com/leafo/lessphp) and copy it in one of folders listed in "include_path", so this code will work: `include_once("lessc.inc.php")`
 * In your code add a command `include_once("waPluginator/waPluginator.php")`
 * Don't forget to add one of **jquery** versions in your html code (any version from 1.10 to 2.x will do)
+
 ## Using example
 ```php
         include_once('waPluginator/waPluginator.php');
