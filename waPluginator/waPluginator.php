@@ -37,19 +37,21 @@ class WaPluginator {
        'description' => 'Plugin Вescription',
        'acl_list' => 'ACL right name(s) (comma delimited)',
        'color_scheme' => 'Color Scheme (Theme)',
-       'create_bkend' => 'Create Backend Module',
-       'create_js' => 'Create JavaScript Module',
-       'create_locales' => 'Create Localization Files',
+#       'create_js' => 'Create JavaScript Module',
+#       'create_locales' => 'Create Localization Files',
        'btn_generate' => 'Generate',
        'btn_reverseing' => 'Code -&gt; Template',
        'title_log' => 'Generation log',
 
        'size' => 'size',
-       'compile_ok' => 'Sass/Less Compilation successful',
+       'compile_ok' => 'Compilation successful',
+       'err_no_srcarchive' => 'srcarchive parameter must be set (zip file name)',
        'err_create_folder' => 'Create folder error',
-       'err_zipopen' => 'File open error',
+       'err_srcfile_not_found' => 'Source file not found',
+       'err_skipped_no_dir' => 'File skipped because of subdirectory creation fail',
+       'err_zipopen' => 'Zip file open error (not a zip?)',
        'err_zipnotfound' => 'Zip file not found',
-       'err_bad_scss' => 'Compile scss file error',
+       'err_compile_fail' => 'Compilation failed',
        'err_bad_less' => 'Compile less file error',
        'job_finished' => 'Files creation finished'
     );
@@ -61,13 +63,13 @@ class WaPluginator {
 
     private static $FOLDER_ROOT = null;
     private static $_saveBak = true;
-    private static $_langs = array('en' => 'English', 'ru' => 'Russian');
+    private static $_langs = array('en' => 'English');
     private static $_p = array();
     private static $_tplfile_main = '';
     private static $_tplfile_backend = '';
     private static $_options = array();
     private static $_result = '';
-    private static $_plgtypes = array(array('basename'=>'std', 'title'=>'Stub module'));
+    private static $_templates = array();
     private static $author = '';
     private static $author_email = '';
     private static $author_site = 'www.no-site.net';
@@ -78,8 +80,10 @@ class WaPluginator {
     private static $_varsets = array(); // predefined variable sets to be reused
     private static $_schemes = array(); // color schemes / themes
 
-    static private $scss_comp = null; # sass compiler object to be here!
-    static private $less_comp = null; # less compiler object to be here!
+    private static $_srcRoot = ''; // root folder with all source files to be processed
+
+#    static private $scss_comp = null; # sass compiler object to be here!
+#    static private $less_comp = null; # less compiler object to be here!
 
     private static $_scheme = array(); // chosen color scheme
     private static $_useSchemes = false;
@@ -104,12 +108,57 @@ class WaPluginator {
         (is_object($compObj) && method_exists($compObj,$funcName))
             or die ('addCompiler call with wrong parameters!');
         $ext = strtolower($ext);
+
+        if (!in_array($ext, self::$TYPES_TXT)) self::$TYPES_TXT[] = $ext;
+
         self::$_compilers[$ext] = array(
             'object' => $compObj,
             'method' => $funcName,
             'outext' => $outext
         );
     }
+
+    /**
+    * Adding "predefined" compilers for scss and less, using compilers:
+    * scss: https://github.com/leafo/scssphp
+    * less: https://github.com/leafo/lessphp
+    */
+    public static function addStdCompilers() {
+
+		# load scss compiler
+		if (!isset(self::$_compilers['scss'])) {
+            try {
+                if (!class_exists('Leafo\ScssPhp\Compiler'))
+                    @include_once('scssphp/scss.inc.php');
+				if (class_exists('Leafo\ScssPhp\Compiler')) {
+	            	self::addCompiler('scss',new Leafo\ScssPhp\Compiler,'compile','css');
+				}
+	            else {
+					self::addError('scssphp/scss.inc.php not found, SCSS compilation impossible');
+				}
+			}
+			catch(Exception $e) {
+				self::addError('scssphp/scss.inc.php not found, SCSS compilation impossible');
+			}
+		}
+		# load less compiler
+		if (!isset(self::$_compilers['less'])) {
+            try {
+                if (!class_exists('lessc'))
+                    @include_once('lessc.inc.php');
+				if (class_exists('lessc')) {
+	            	self::addCompiler('less',new lessc,'compile','css');
+				}
+	            else {
+					self::addError('lessc.inc.php not found, LESS compilation impossible');
+				}
+			}
+			catch(Exception $e) {
+				self::addError('lessc.inc.php not found, LESS compilation impossible');
+			}
+		}
+	}
+
     public static function setBaseUri($uri) {
         self::$_baseuri = $uri;
     }
@@ -198,20 +247,18 @@ class WaPluginator {
                     self::$_varsets[$id] = self::readCfgVars($vset);
                 }
             }
-            // read plugintypes
-            if (isset($xml->plugintypes)) {
-                self::$_plgtypes = array();
-                foreach($xml->plugintypes->children() as $cid=>$obj) {
+            // read template definitions
+            if (isset($xml->templates)) {
+                self::$_templates = array();
+                foreach($xml->templates->children() as $cid=>$obj) {
 
                     $plgtype = (string)$obj['basename'];
                     $ptype = array(
                     	'basename'=>$plgtype,
-                    	'title'=>(string)$obj['title'],
-                    	'colorschemes' => (isset($obj['colorschemes']) ? (int)$obj['colorschemes'] : false)
+                    	'title'=> (empty($obj['title'])? $plgtype : (string)$obj['title']),
+                    	'colorschemes' => (isset($obj['colorschemes']) ? (int)$obj['colorschemes'] : false),
+						'srcarchive' =>  (!empty($obj['src']) ? (string)$obj['src'] : "$plgtype.zip"),
                     );
-
-                    if (class_exists('ZipArchive') && !empty($obj->srcarchive))
-                    	$ptype['srcarchive'] = (string) $obj->srcarchive; # template files in zip file
 
                     $files = array();
                     if (isset($obj->files)) foreach($obj->files->children() as $itm) {
@@ -226,7 +273,7 @@ class WaPluginator {
                         $plg_vars = array();
                         $ptype['vars'] = self::readCfgVars($obj->vars, true);
                     }
-                    self::$_plgtypes[$plgtype] = $ptype;
+                    self::$_templates[$plgtype] = $ptype;
                 }
             }
             $xml = null;
@@ -299,7 +346,7 @@ class WaPluginator {
         $mdl = array();
         $var_blocks = '';
         $withColors = '';
-        foreach (self::$_plgtypes as $item) {
+        foreach (self::$_templates as $item) {
 
             $basename = $item['basename'];
             if ($item['colorschemes'])
@@ -360,9 +407,11 @@ class WaPluginator {
         foreach (self::$_schemes as $schemeId=>$svars) {
 			$colorshemeOptions.= "<option value='$schemeId'>$schemeId</option>";
 		}
+/*
         foreach(self::$_langs as $key=>$langname) {
             $str_langs .= "<input type=\"checkbox\" name=\"locale_$key\" id=\"locale_$key\" value=\"1\" /> <label for=\"locale_$key\">$langname</label> &nbsp;\n";
         }
+*/
 
         $m = self::$_msg;
 
@@ -378,7 +427,7 @@ waPluginator = {
   ,restoreOpt: function(obj) {
       var params = { action: 'restoreoptions', plg_basename: obj.value };
       SendServerRequest("$uri", params);
-      setTimeout("$('#plugintype').trigger('change');", 100);
+      setTimeout("$('#template').trigger('change');", 100);
    }
   ,generate: function() {
       if($('#plg_basename').val() === '') { alert('Empty plugin name !'); return false; }
@@ -397,7 +446,7 @@ waPluginator = {
         $('#waBtnReverse').prop('disabled', (this.f1.val() ===''));
    }
    ,chgPlgtype: function() {
-      var pltype = $('select#plugintype').val();
+      var pltype = $('select#template').val();
       $('tr[id^=vars_]').hide();
       if (pltype === '') { $('#waBtnStart').prop('disabled',true); return; }
       $('tr[id^=vars_'+pltype+']').show();
@@ -440,34 +489,34 @@ waPluginator = {
 </script>
 
 <form id="fm_wapluginator"><input type="hidden" name="action" value="generateall" />
-<div class="div_outline" style="width:600px; min-height:400px; position:relative;float:left">
+<div class="div_outline" style="width:600px; min-height:400px; overflow:auto; position:relative; float:left">
 <table>
   <tr>
     <td>$m[author_name]</td>
-    <td><input type="text" name="author" id="author" class="ibox w300" value="$author"/></td>
+    <td><input type="text" name="author" id="author" class="ibox" style="width:100%" value="$author"/></td>
   </tr>
   <tr>
     <td>$m[author_email]</td>
-    <td><input type="text" name="email" id="email" class="ibox w300"  value="$author_email"/></td>
+    <td><input type="text" name="email" id="email" class="ibox" style="width:100%" value="$author_email"/></td>
   </tr>
   <tr>
     <td>$m[author_site]</td>
-    <td><input type="text" name="link" id="link" class="ibox w300" value="$author_site" /></td>
-  </tr>
-  <tr>
-    <td>$m[base_class_name] *</td>
-    <td><input type="text" name="plg_basename" id="plg_basename" class="ibox w100" onkeyup="waPluginator.baseKeyUp()" onchange="waPluginator.restoreOpt(this)"/></td>
-  </tr>
-  <tr>
-    <td>$m[plugin_folder] *</td>
-    <td><input type="text" name="plg_folder" id="plg_folder" class="ibox w100" /></td>
+    <td><input type="text" name="link" id="link" class="ibox" style="width:100%" value="$author_site" /></td>
   </tr>
   <tr>
     <td>$m[plugin_type] *</td>
-    <td><select name="plugintype" id="plugintype" style="width:300px" onchange="waPluginator.chgPlgtype()">
+    <td><select name="template" id="template" style="width:100%" onchange="waPluginator.chgPlgtype()">
     <option value="">---</option>
     $plgOptions</select>
     </td>
+  </tr>
+  <tr>
+    <td>$m[base_class_name] *</td>
+    <td><input type="text" name="plg_basename" id="plg_basename" class="ibox" style="width:100px" onkeyup="waPluginator.baseKeyUp()" onchange="waPluginator.restoreOpt(this)"/></td>
+  </tr>
+  <tr>
+    <td>$m[plugin_folder] *</td>
+    <td><input type="text" name="plg_folder" id="plg_folder" class="ibox" style="width:100px" /></td>
   </tr>
   <tr>
     <td>$m[main_title]</td>
@@ -488,19 +537,21 @@ waPluginator = {
     </select></td>
   </tr>
   $var_blocks
+<!--
   <tr>
-    <td><label for="plg_createbkend">$m[create_bkend]</label></td>
+    <td><label for="plg_createbkend">[create_bkend]</label></td>
     <td><input type="checkbox" name="plg_createbkend" id="plg_createbkend" /></td>
   </tr>
   <tr>
-    <td><label for="plg_createjs">$m[create_js]</label></td>
+    <td><label for="plg_createjs">[create_js]</label></td>
     <td><input type="checkbox" name="plg_createjs" id="plg_createjs" /></td>
   </tr>
+
   <tr>
     <td>$m[create_locales]</td>
     <td>$str_langs </td>
   </tr>
-
+-->
   <tr>
     <td colspan="2">
      <input type="button" class="button w200" value="$m[btn_generate]" onclick="waPluginator.generate()" id="waBtnStart" disabled="disabled"/>
@@ -576,12 +627,12 @@ EOHTM;
         self::$_result = '';
 
         $plg_basename = isset(self::$_p['plg_basename']) ? trim(self::$_p['plg_basename']) : '';
-        $plugintype   = isset(self::$_p['plugintype']) ? trim(self::$_p['plugintype']) : '';
+        $template   = isset(self::$_p['template']) ? trim(self::$_p['template']) : '';
         $locls = strtolower($plg_basename);
         $plg_folder = isset(self::$_p['plg_folder']) ? trim(self::$_p['plg_folder']) : '';
         $mainFile = $basefilename = $plg_folder;
         if($plg_basename === '' OR $plg_folder === '') return 'Empty base name OR plugin file/folder name !';
-        if(substr($plg_folder, -1) !=='/') $plg_folder .= '/';
+        if(substr($plg_folder, -1) !=='/' && substr($plg_folder, -1) !=='\\') $plg_folder .= '/';
 /*
         if (!empty(self::$_p['__outfolder__']))
             $subFolder = self::$_options['__outfolder__'];
@@ -619,12 +670,12 @@ EOHTM;
         if (!empty(self::$_p['plg_createjs']))    self::$_options['plg_createjs'] = 1;
 
         $mainFile =  self::$FOLDER_ROOT . self::$FOLDER_OUTPUT . $locls . '.php';
+/*
         $backendFile =  $subFolder . 'backend.php';
-
-        $tplname_main    = __DIR__ ."/$plugintype.main.txt";
-        $tplname_backend = __DIR__ ."/$plugintype.backend.txt";
-        $tplname_js      = __DIR__ ."/$plugintype.js.txt";
-
+        $tplname_main    = __DIR__ ."/$template.main.txt";
+        $tplname_backend = __DIR__ ."/$template.backend.txt";
+        $tplname_js      = __DIR__ ."/$template.js.txt";
+*/
         self::$subst = array(
             '%appname%' => (isset(self::$_options['appname']) ? self::$_options['appname'] : 'Noname')
            ,'%description%' => (isset(self::$_options['description']) ? self::$_options['description'] : '')
@@ -647,17 +698,17 @@ EOHTM;
 
         // Add user entered parameters values for selected plugin type
         self::$parsvars = array();
-        if ( isset(self::$_plgtypes[$plugintype]['vars']) && count(self::$_plgtypes[$plugintype]['vars']>0) )
-            foreach( self::$_plgtypes[$plugintype]['vars'] as $varid => $vobj ) {
-                $pname = 'input_'.$plugintype.'_'.$varid;
+        if ( isset(self::$_templates[$template]['vars']) && count(self::$_templates[$template]['vars']>0) )
+            foreach( self::$_templates[$template]['vars'] as $varid => $vobj ) {
+                $pname = 'input_'.$template.'_'.$varid;
                 $value = isset(self::$_p[$pname])? self::$_p[$pname] : '';
                 if ($vobj['type'] === 'checkbox') $value = $value ? 'TRUE':'FALSE';
                 self::$subst["%$varid%"] = self::$parsvars[$varid] = $value;
         }
 
         self::$_scheme = isset(self::$_p['_color_cscheme_']) ? (self::$_p['_color_cscheme_']) : '';
-        self::$_useSchemes = self::$_plgtypes[$plugintype]['colorschemes'];
-#        exit($plugintype . ', color scheme:' . self::$_scheme . ', all plgtype:<pre>' . print_r(self::$_plgtypes[$plugintype],1).'</pre>'); // debug
+        self::$_useSchemes = self::$_templates[$template]['colorschemes'];
+#        exit($template . ', color scheme:' . self::$_scheme . ', all plgtype:<pre>' . print_r(self::$_templates[$template],1).'</pre>'); // debug
 
         self::$parsvars = array_merge(self::$parsvars, self::$_options);
 
@@ -671,7 +722,42 @@ EOHTM;
 			self::$subst = array_merge(self::$subst, self::$_clrsubst);
 #			WriteDebugInfo("colors in chosen scheme:",self::$_clrsubst);
 		}
-        # 1. Create plugins/plg_name.php self::$_plgtypes[$plugintype]['files']
+        # 1. unpack zip into temp[ folder and begin process files
+        $zipName = (!empty(self::$_templates[$template]['srcarchive'])) ? self::$_templates[$template]['srcarchive']
+        	: ($template . '.zip');
+
+        $fullZip = __DIR__ . DIRECTORY_SEPARATOR . $zipName;
+		if (!$zipName) {
+			self::addError(self::$_msg['err_no_srcarchive']);
+			return self::$_result;
+		}
+        if ( is_file($fullZip)) {
+            self::addLog(self::$_msg['creating_from'] . ' '. $zipName);
+            $tmpfold = self::$FOLDER_TMP . 'tmp-' . date('His') . rand(1000,9000);
+            mkdir($tmpfold, 077, true);
+
+            if (is_dir($tmpfold)) {
+            	self::$_srcRoot = $tmpfold . DIRECTORY_SEPARATOR;
+
+                $srczip = new ZipArchive();
+                $opened = $srczip->open($fullZip);
+                if($opened === true) {
+	                $srczip->extractTo($tmpfold);
+				}
+				else
+                {
+                	self::addError(basename($fullZip) . ' : ' . self::$_msg['err_zipopen'] );
+                	return self::$_result;
+				}
+            } else {
+                self::addError('Tmp sub-folder creation error. Job failed');
+                return self::$_result;
+			}
+        } else {
+            self::addError(self::$_msg['err_zipnotfound'] . ' : ' . $zipName);
+            return self::$_result;
+		}
+/****
         if (is_file($tplname_main)) {
             $body = @file_get_contents($tplname_main);
             $body = self::$preproc->parse($body, self::$parsvars);
@@ -696,92 +782,61 @@ EOHTM;
             $body = str_replace(array_keys(self::$subst), array_values(self::$subst), $body);
             self::_saveNewFile($jsFile, $body);  # file_put_contents($backendFile, $body);
         }
+****/
         # 3. Create additional files if exist in config
-        $var_pref = 'input_'.$plugintype.'_';
-        if (!empty(self::$_plgtypes[$plugintype]['files']) && count(self::$_plgtypes[$plugintype]['files'])>0) {
+        $var_pref = 'input_'.$template.'_';
+        if (!empty(self::$_templates[$template]['files']) && count(self::$_templates[$template]['files'])>0) {
 
-            foreach (self::$_plgtypes[$plugintype]['files'] as $pfile) {
-
+            foreach (self::$_templates[$template]['files'] as $pfile) {
+                self::$_srcRoot .
+                $src = self::$_srcRoot . $pfile['src'];
                 if ( isset($pfile['makeif']) && !empty($pfile['makeif'])) {
                     $prmname = $var_pref . $pfile['makeif'];
                     $doit = isset(self::$_p[$prmname]) ? self::$_p[$prmname] : FALSE;
-                    if (!$doit) continue;
+                    if (!$doit) {
+                        if (is_file($src)) unlink($src);
+                    	continue;
+					}
                 }
-                $src = __DIR__ . '/'. $pfile['src'];
                 if (!is_file($src)) {
-                    self::$_result .= "<tr><td colspan=2>Template File skipped: $pfile[src]</td></tr>";
+                    self::adError(self::$_msg['err_srcfile_not_found'] . ' : ' . $pfile['src']);
                     continue;
                 }
-                $dest = $subFolder . str_replace('%plugin%',$locls, $pfile['name']);
+				$subdirfile = str_replace('%moduleid%',$locls, $pfile['name']);
+                $dest = $subFolder . $subdirfile;
                 $dirOk = true;
                 $destdir = dirname($dest);
                 if (!is_dir($destdir)) $dirOk = mkdir($destdir,077,true);
-                if (!$dirOk) continue;
-                $is_less = (substr($pfile['src'],-5) === '.less') || (substr($pfile['src'],-9) === '.less.txt');
-                $is_scss = (substr($pfile['src'],-5) === '.scss') || (substr($pfile['src'],-9) === '.scss.txt');
+                if (!is_dir($destdir)) {
+                    self::addError(self::$_msg['err_skipped_no_dir'] . ' : ' .$subdirfile);
+                    unlink($src);
+                    continue;
+				}
+                $point = strrpos($pfile['src'], '.');
+                $filext = strtolower(substr($pfile['src'], (1+$point)));
                 $body = file_get_contents($src);
 
                 $body = self::$preproc->parse($body, self::$parsvars); # perform #IF .. #ELSE .. #ENDIF #INCLUDE macros
 
                 self::$subst['%filename%'] = $dest;
                 $body = str_replace(array_keys(self::$subst), array_values(self::$subst), $body);
-                if ($is_scss) { // Compile scss to CSS file !
-                	self::compileScss($body, $dest);
 
-                }
-                if ($is_less) { // Compile LESS to CSS file !
-                    self::compileLess($body, $dest);
-                }
+                if (isset(self::$_compilers[$fileext])) {
+                	self::compileBody($body, $fileext, $pfile['src']);
+                	if (!empty(self::$_compilers[$fileext]['outext']))
+                		$dest = substr($dest, 0, -strlen($fileext)) .self::$_compilers[$fileext]['outext'];
+                		// change file extension
+				}
+
                 self::_saveNewFile($dest, $body);  # file_put_contents($backendFile, $body);
+                unlink($src);
             }
         }
-        # 4. i18n language file stubs
-        foreach (self::$_langs as $key => $name) {
-            if(!empty(self::$_p['locale_'.$key])) {
-                $lng_tpl = __DIR__ . "/$plugintype.i18n.$key.txt";
-                if (is_readable($lng_tpl)) $body = file_get_contents($lng_tpl);
-                else $body = <<< EOTXT
-<?php
-/**
-* Localization module for plugin $plg_basename.php (class %classname%)
-* Language: $name
-* %description%
-* created: %date%
-*/
-return array(
-   '$locls:main_title' => '%plg_title%'
-);
-EOTXT;
-                $body = self::$preproc->parse($body, self::$parsvars);
-                $body = str_replace(array_keys(self::$subst), array_values(self::$subst), $body);
-#                if(!is_dir(self::$FOLDER_ROOT . self::$FOLDER_I18N . $key)) mkdir(self::$FOLDER_ROOT . self::$FOLDER_I18N . $key, 0777,true);
-                $langFname = $subFolder . "strings.$key.php";
-                self::_saveNewFile($langFname, $body);
-            }
-        }
+        # 4. process language files if parameter set: <plugin  ... locfiles="strings.{lng}.php" >
 
-        # 5. If srcarchive set, handle zip with all templates
-        if (!empty(self::$_plgtypes[$plugintype]['srcarchive']) && is_file(__DIR__ . DIRECTORY_SEPARATOR . self::$_plgtypes[$plugintype]['srcarchive'])) {
-            $zipFile = __DIR__ . DIRECTORY_SEPARATOR . self::$_plgtypes[$plugintype]['srcarchive'];
-            self::addLog(self::$_msg['creating_from'] . ' '. self::$_plgtypes[$plugintype]['srcarchive']);
-            $tmpfold = self::$FOLDER_TMP . 'tmp-' . date('His') . rand(1000,9000);
-            mkdir($tmpfold, 077, true);
-            if (is_dir($tmpfold)) {
-                $srczip = new ZipArchive();
-                $opened = $srczip->open($zipFile);
-                if($opened === true) {
-	                $srczip->extractTo($tmpfold);
-	                self::processFolder($tmpfold, $subFolder);
-	                self::delTree($tmpfold); # tmp cleanup from source files
-				}
-				else
-                {
-                	self::addError(basename($zipFile) . ' : ' . self::$_msg['err_zipopen'] );
-				}
-            } else
-                self::addError('tmp sub-folder creation error');
-        } else
-            self::addError(self::$_msg[''] . ': ' . __DIR__ . DIRECTORY_SEPARATOR . self::$_plgtypes[$plugintype]['srcarchive']);
+        # 5. handle rest files from zip (remaining in tmp fodler)
+	    self::processFolder($tmpfold, $subFolder);
+	    self::delTree($tmpfold); # tmp cleanup after job
 
         self::addLog(self::$_msg['job_finished']);
         return self::$_result;
@@ -809,13 +864,9 @@ EOTXT;
 
         if (($ext) && (in_array($ext, self::$TYPES_TXT))) {
 
-	        $is_scss = ($ext === 'scss');
-	        $is_less = ($ext === 'less');
-
-	        if ($is_scss || $is_less) { // Use sass parser and change destination file name to css
+			if (isset(self::$_compilers[$ext])) { # there's a registerd compiler, name changed!
 	            $oldfn = $fileDest;
-        		$fileDest = substr($fileDest,0,$point+2) . 'css';
-        		WriteDebugInfo("Changed filename $oldfn to $fileDest");
+        		$fileDest = substr($fileDest,0,$point+2) . self::$_compilers[$ext]['outext'];
 			}
 
             self::$subst['%filename%'] = $fileDest;
@@ -823,11 +874,8 @@ EOTXT;
             $body = self::$preproc->parse($body, self::$parsvars);
             $body = str_replace(array_keys(self::$subst), array_values(self::$subst), $body);
 
-            if ($is_scss) {
-                self::compileScss($body, $fileDest);
-            }
-            if ($is_less) {
-                self::compileLess($body, $fileDest);
+			if (isset(self::$_compilers[$ext])) { # there's a registerd compiler, name changed!
+            	self::compileBody($body, $ext, $fileSrc);
             }
 
             self::_saveNewFile($fileDest, $body);  # file_put_contents($backendFile, $body);
@@ -843,71 +891,28 @@ EOTXT;
 #		WriteDebugInfo("float val: $fval, $par => $ret");
 		return $ret;
     }
+	/**
+	* Perform in-place compilation of source body by one on registered compilers/parsers
+	*
+	* @param mixed $body string containing source code
+	* @param string $type type of compiler (equal to extension of source file: 'scss', 'less' etc.)
+	*/
+    public static function compileBody(&$body, $type, $srcname) {
 
-    public static function compileScss(&$body, $srcname) {
+    	if (!isset(self::$_compilers[$type])) return;
 
-    	if (!self::$scss_comp) {
-            try {
-                if (!class_exists('Leafo\ScssPhp\Compiler'))
-                    @include_once('scssphp/scss.inc.php');
-				if (class_exists('Leafo\ScssPhp\Compiler'))
-	            	self::$scss_comp = new Leafo\ScssPhp\Compiler();
-	            else {
-					self::$scss_comp = 1;
-					self::addError('scssphp/scss.inc.php not found, SCSS compilation impossible');
-				}
-			}
-			catch(Exception $e) {
-				self::$scss_comp = 1;
-				self::addError('scssphp/scss.inc.php not found, SCSS compilation impossible');
-			}
-		}
+        try {
 
-    	if (is_object(self::$scss_comp)) {
-            try {
-                $orig_body = $body;
-                $body = self::$scss_comp->compile($body);
-                file_put_contents("_compiled.css", $body);
-                self::addLog(self::$_msg['compile_ok']. ' : ' . $srcname);
-            } catch (exception $e) {
-                self::addError(self::$_msg['err_bad_scss']. ' : ' . $srcname);
-                self::addError($e->getMessage());
-                $body = $orig_body; # back to original content
-            }
+            $orig_body = $body;
+            $compMethod = self::$_compilers[$type]['method'];
+            $body = self::$_compilers[$type]['object']->$compMethod($body);
+            self::addLog(self::$_msg['compile_ok']. ' : ' . substr($srcname, strlen(self::$_srcRoot)));
+        } catch (exception $e) {
 
-		}
-	}
-
-    public static function compileLess(&$body, $srcname) {
-
-    	if (!self::$less_comp) {
-    		try {
-                if (!class_exists('lessc'))
-                    @include_once('lessc.inc.php');
-	            if (class_exists('lessc'))
-	            	self::$less_comp = new lessc;
-	            else {
-	            	self::$less_comp = 1;
-					self::addError('lessc.inc.php not found, LESS compilation impossible');
-				}
-			}
-			catch(Exception $e) {
-				self::$less_comp  = 1;
-				self::addError('lessc.inc.php not found, LESS compilation impossible');
-			}
-		}
-
-    	if (is_object(self::$less_comp)) {
-            try {
-                $orig_body = $body;
-                $body = self::$less_comp->compile($body);
-                self::addLog(self::$_msg['compile_ok']. ' : ' . $srcname);
-            } catch (exception $e) {
-                self::addError(self::$_msg['err_bad_less'] . ' : '. $srcname);
-                self::addError($e->getMessage());
-                $body = $orig_body; # back to original content
-            }
-		}
+            self::addError(self::$_msg['err_compile_fail']. ' : ' . $srcname);
+            self::addError($e->getMessage());
+            $body = $orig_body; # back to original content
+        }
 	}
 
     private static function addLog($strk1,$strk2='') {
