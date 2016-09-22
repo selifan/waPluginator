@@ -1,4 +1,5 @@
 # Source code generator for modules, plugins and landing pages
+
 Majority of web applications, CMS systems, frameworks uses "modular" (or plugin) architecture. 
 It allows easy developing of new functionality and adding it to the system.
 Quite often modules, or plugins, have a similar structure, so it would be great to have a kind of "template" with places for inserting specific "variable" values, 
@@ -11,7 +12,6 @@ For example, you want to create a landing page based on some of royalty free pag
 In that case you just modify source page files, by adding special macros (like `%textblock01%`), register them in waPluginator,
 and next time, when you press "generate", new files will be created with your values, entered in generator's "designer" form.
 
-So this library was written to give a "little help" in creating plugin stubs for web applications, and easify creating of multiple landing pages.
 
 ## Installing
 * Download current version of waPluginator and install it in current folder of your project or one of folders listed in "include_path"
@@ -45,3 +45,5 @@ So this library was written to give a "little help" in creating plugin stubs for
         }
 ```
 
+Collection of prepared template files, images, font files etc. can be packed in one zip file or placed in a sub-direcory of waPluginator directory, 
+and described in the main [configuration XML file](waConfigurator.xml-file-structure).
