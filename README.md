@@ -50,4 +50,4 @@ and described in the main [configuration XML file](https://github.com/selifan/wa
 
 Working demo can be found in [demo](demo/) folder - [generator.php](demo/generator.php)
 
-See using details in [wiki](wiki/)
+See using details in [wiki](https://github.com/selifan/waPluginator/wiki/)
