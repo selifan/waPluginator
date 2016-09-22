@@ -1,4 +1,4 @@
-# Source code generator for modules, plugins and landing pages
+# Code generator for modules, plugins and landing pages
 
 Majority of web applications, CMS systems, frameworks uses "modular" (or plugin) architecture. 
 It allows easy developing of new functionality and adding it to the system.
@@ -47,3 +47,7 @@ and next time, when you press "generate", new files will be created with your va
 
 Collection of prepared template files, images, font files etc. can be packed in one zip file or placed in a sub-direcory of waPluginator directory, 
 and described in the main [configuration XML file](https://github.com/selifan/waPluginator/wiki/waConfigurator.xml-file-structure).
+
+Working demo can be found in [demo](demo/) folder - [generator.php](demo/generator.php)
+
+See using details in [wiki](wiki/)
