@@ -46,4 +46,4 @@ and next time, when you press "generate", new files will be created with your va
 ```
 
 Collection of prepared template files, images, font files etc. can be packed in one zip file or placed in a sub-direcory of waPluginator directory, 
-and described in the main [configuration XML file](wiki/waConfigurator.xml-file-structure).
+and described in the main [configuration XML file](/selifan/waPluginator/wiki/waConfigurator.xml-file-structure).
