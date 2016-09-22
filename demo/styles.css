@@ -1,0 +1,48 @@
+body { margin:0; padding:0; font:verdana,tahoma 12px normal; }
+h1, h2 { background: #008; text-align:center; width:100%; color:yellow; margin-top:0; margin-bottom:10px; }
+
+textarea, input[type=text], .ibox { border: 1px solid #6060E0;
+  background-color: #F8F8FF; color:#000000;
+  font: verdana,tahoma 12px normal;
+}
+input[type="button"], button {
+   border: 1px solid #5050a0;
+   height:20px;
+   background: -ms-linear-gradient(top,  #eef,  #aaf); /* IE10+ */
+   background: -moz-linear-gradient(top, #eef, #aaf);
+   background: -webkit-gradient(linear, 0 0, 0 100%, from(#eef), to(#aaf));
+   background-image: -o-linear-gradient(top, #eeeeff, #aaaaff);
+   background: -o-linear-gradient(top,  #eef,  #aaf);
+   color: #008; font: normal 11px Verdana,Helvetica,Arial,sans-serif !important;
+   border-radius:0 !important; -moz-border-radius: 0 !important; -webkit-border-radius:0 !important;
+   box-shadow:2px 1px 1px rgba(80,80,80,0.8);
+  -webkit-box-shadow:2px 1px 1px rgba(80,80,80,0.8);
+  -moz-box-shadow:2px 1px 1px rgba(80,80,80,0.8);
+}
+select { font: verdana,tahoma 12px normal; }
+.div_outline {
+  background: #e0e0f8; border: 2px solid #7070f0; padding: 2px;
+  font: #0707e0 11px arial,verdana;
+  border-radius:2px; -moz-border-radius:2px; -webkit-border-radius:2px;
+}
+
+.darkhead { background-color: #228; border:1px solid #eef; color:#fff; text-align:center; font-weight:bold;
+  background: -ms-linear-gradient(left,  #228,  #77e); /* IE10+ */
+  background: -moz-linear-gradient(left, #228,  #77e);
+  background: -webkit-gradient(linear, 0 0, 0 100%, from(#228), to(#77e));
+
+  padding: 2px 6px; font:bold 11px verdana,tahoma,arial; margin-bottom: 5px;
+}
+
+input[disabled="disabled"], input[disabled=true], input.disabled, input[type=text][disabled],input[type=button][disabled],
+ .button[disabled=true], button[disabled], button[disabled="disabled"] {
+  color: #888888;
+  background-color:#ededff;
+}
+table.zebra { border: 1px solid #ccf; border-spacing: 0; border-collapse: collapse; }
+table.zebra tr td { border: 1px solid #ccf; padding: 0 0.3em; padding: 2px; font: verdana,tahoma 10px normal;}
+table.zebra tr:nth-child(even) { background: #eeeeff }
+table.zebra tr:nth-child(odd) { background: #f8f8ff }
+table.zebra tr:hover td { background: #fefeff; }
+table.maxform { width:100%; padding:4px;}
+table.maxform td { white-space: nowrap; margin: 4px; }

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Configuration file for waPluginator.php -->
+<config>
+   <credits author="Alexander Selifonov" email="Aleksandr.Selifonov@allianzlife.ru"
+     site="https://github.com/selifan" />
+   <varsets>
+     <varset id="landing">
+         <var name="sitename" type="text" width="300" label="Site Name" default=""  />
+         <var name="short_desc" type="text" label="Short Description" />
+         <var name="signup_url" type="text" label="Signup URL" default="./#"  />
+         <var name="redirect_url" type="text"  label="Redirect URL" default="./thankyou.html"  />
+         <var name="text_summary" type="textarea" height="80" label="Summary text" />
+         <var name="text_terms" type="textarea" height="40" label="Terms And Conditions" default=""  />
+     </varset>
+
+     <varset id="textblocks">
+	     <var name="text_title_01" type="text" width="100%" label="Text Block 1 Title" default="Block 1 title" />
+	     <var name="text_block_01" type="textarea" height="40" label="Block 1 text" default="Text in block 1" />
+	     <var name="text_title_02" type="text" width="100%" label="Block 2 title" />
+	     <var name="text_block_02" type="textarea" height="40" label="Text Block 2" />
+	     <var name="text_title_03" type="text" width="100%" label="Block 3 title" />
+	     <var name="text_block_03" type="textarea" height="40" label="Text Block 3" />
+     </varset>
+   </varsets>
+
+   <templates>
+
+     <template basename="std" title="Simple Plugin Stub">
+       <files>
+         <file name="../%moduleid%.php" src="main.php" />
+         <file name="backend.php" src="backend.php" makeif="create_backend"/>
+         <file name="%moduleid%.js" src="std.js" makeif="create_js" />
+       </files>
+       <vars>
+         <var name="create_backend" type="checkbox" label="Generate  backend" default="0" />
+         <var name="create_js" type="checkbox" label="Generate  js module" default="0" />
+         <var name="currency" type="select" label="Currency" options="EUR=Euros;USD=US dollars;RUR=Russian rubles" />
+       </vars>
+     </template>
+
+
+     <template basename="landing_dl" title="Landing:download page" colorschemes="1" src="landing-dl.zip">
+       <vars>
+         <usevarset>landing</usevarset>
+         <usevarset>textblocks</usevarset>
+         <var name="btn_enternow" type="text" width="200" label="[Enter] Button text" default="Yes, I want it!"  />
+       </vars>
+     </template>
+
+   </templates>
+
+</config>
