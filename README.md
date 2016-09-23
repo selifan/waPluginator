@@ -39,6 +39,10 @@ else {
 }
 ```
 
+**waPluginator** uses [CodePreprocessor](https://github.com/selifan/CodePreprocessor) to parse template files, 
+but it allows attaching any additional text/source code processors (compilers), like "scss to css", "less to css" etc.
+You can attach compiler if it is implemented as PHP class with callable "compiling" method.
+ 
 Working demo can be found in [demo](demo/) folder - [generator.php](demo/generator.php)
 
 See using details in [wiki](https://github.com/selifan/waPluginator/wiki/)
