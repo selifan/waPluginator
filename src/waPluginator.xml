@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Configuration file for waPluginator.php -->
 <config>
-   <credits author="Alexander Selifonov" email="Aleksandr.Selifonov@allianzlife.ru"
-     site="https://github.com/selifan" />
+   <credits author="My Name" email="mymail@company.com"   site="http://mycompany.com" />
    <varsets>
      <varset id="landing">
          <var name="sitename" type="text" width="300" label="Site Name" default=""  />
@@ -39,7 +38,7 @@
      </template>
 
 
-     <template basename="landing_dl" title="Landing:download page" colorschemes="1" src="landing-dl.zip">
+     <template basename="landing_01" title="Landing page example" colorschemes="1" src="landing-01.zip">
        <vars>
          <usevarset>landing</usevarset>
          <usevarset>textblocks</usevarset>
