@@ -7,12 +7,11 @@
 * @link https://github.com/selifan/waPluginator
 * @Version 0.3.072
 * started 2013-01-18
-* modified 2016-09-22
+* modified 2016-09-23
 **/
 class WaPluginator {
 
     static $FOLDER_OUTPUT = 'plugins/';
-    static $FOLDER_I18N = 'i18n/';
     static $FOLDER_CFG = 'cfg/';
     static $FOLDER_TMP = 'tmp/';
 	/**
@@ -35,10 +34,7 @@ class WaPluginator {
        'plugin_type' => 'Plugin Type',
        'main_title' => 'Main title',
        'description' => 'Module Description',
-       'acl_list' => 'ACL right name(s) (comma delimited)',
        'color_scheme' => 'Color Scheme (Theme)',
-#       'create_js' => 'Create JavaScript Module',
-#       'create_locales' => 'Create Localization Files',
        'btn_generate' => 'Generate',
        'btn_reverseing' => 'Code -&gt; Template',
        'title_log' => 'Generation log',
@@ -46,6 +42,7 @@ class WaPluginator {
 
        'size' => 'size',
        'compile_ok' => 'Compilation successful',
+       'err_tmpdir_create' => 'Tmp sub-folder creation error. Job failed',
        'err_no_srcarchive' => 'srcarchive parameter must be set (zip file name)',
        'err_create_folder' => 'Create folder error',
        'err_srcfile_not_found' => 'Source file not found',
@@ -59,6 +56,8 @@ class WaPluginator {
     private static $_cfgFile = false;
     private static $_schemeFile = false;
     private static $_baseuri = '';
+
+    private static $_drawLangOptions = false; // reserved
 
     private static $_compilers = array(); // one element: 'scss' => array('object'=><compiler object>, 'method'=>{compile_method_name}, 'outext'=>'css')
 
@@ -98,9 +97,14 @@ class WaPluginator {
 	*
 	* @param mixed $arr associative array with new labels/message values
 	*/
-    public static function setLocalization($arr) {
-    	if (is_array($arr) && count($arr))
-    		self::$_msg = array_merge(self::$_msg, $arr);
+    public static function setLocalization($lang) {
+        if (is_string($lang)) {
+			$lngFile = __DIR__ . DIRECTORY_SEPARATOR . "waPluginator.lng.$lang.php";
+			if (is_file($lngFile)) $lang =include($lngFile);
+			else return;
+		}
+    	if (is_array($arr) && count($lang))
+    		self::$_msg = array_merge(self::$_msg, $lang);
 	}
     /**
     * Add a compiler for file type/extension
@@ -122,6 +126,15 @@ class WaPluginator {
         );
     }
 
+    /**
+    * Setting another output directory for generated modules
+    *
+    * @param mixed $path
+    */
+    public static function setOutputFolder($path) {
+    	self::$FOLDER_OUTPUT = $path;
+    	if (!is_dir(self::$FOLDER_OUTPUT)) @mkdir(self::$FOLDER_OUTPUT);
+	}
     /**
     * Adding "predefined" compilers for scss and less, using compilers:
     * scss: https://github.com/leafo/scssphp
@@ -205,9 +218,7 @@ class WaPluginator {
 		$lngFile = __DIR__ . DIRECTORY_SEPARATOR . "waPluginator.lng.$langid.php";
 		if ($langid && is_file($lngFile)) {
 			// automatic localization
-			$localStrg = include($lngFile);
-			self::setLocalization($localStrg);
-			unset($localStrg);
+			self::setLocalization($langid);
 		}
 	}
 
@@ -348,6 +359,7 @@ class WaPluginator {
 
     public static function designerForm($buffered=false) {
 
+		if (!self::$_baseuri) self::$_baseuri = $_SERVER['PHP_SELF'];
         $uri = self::$_baseuri;
         $str_langs = '';
         self::loadConfig();
@@ -422,11 +434,10 @@ class WaPluginator {
         foreach (self::$_schemes as $schemeId=>$svars) {
 			$colorshemeOptions.= "<option value='$schemeId'>$schemeId</option>";
 		}
-/*
+		if (self::$_drawLangOptions)
         foreach(self::$_langs as $key=>$langname) {
             $str_langs .= "<input type=\"checkbox\" name=\"locale_$key\" id=\"locale_$key\" value=\"1\" /> <label for=\"locale_$key\">$langname</label> &nbsp;\n";
         }
-*/
 
         $m = self::$_msg;
 
@@ -591,7 +602,7 @@ EOHTM;
         exit($ret);
     }
 
-    public static function restoreOptions() {
+    private static function restoreOptions() {
         $plg_basename = isset(self::$_p['plg_basename']) ? trim(self::$_p['plg_basename']) : '';
         $ret = '1';
         if ($plg_basename) {
@@ -609,10 +620,10 @@ EOHTM;
         exit($ret);
     }
 
-    public static function setOptions($opts) {
+    private static function setOptions($opts) {
         if (is_array($opts)) self::$_options = $opts;
     }
-    public static function generateAll() {
+    private static function generateAll() {
 
         try {
             if (!class_exists('CodePreprocessor'))
@@ -674,12 +685,7 @@ EOHTM;
         if (!empty(self::$_p['plg_createjs']))    self::$_options['plg_createjs'] = 1;
 
         $mainFile =  self::$FOLDER_ROOT . self::$FOLDER_OUTPUT . $locls . '.php';
-/*
-        $backendFile =  $subFolder . 'backend.php';
-        $tplname_main    = __DIR__ ."/$template.main.txt";
-        $tplname_backend = __DIR__ ."/$template.backend.txt";
-        $tplname_js      = __DIR__ ."/$template.js.txt";
-*/
+
         self::$subst = array(
             '%appname%' => (isset(self::$_options['appname']) ? self::$_options['appname'] : 'Noname')
            ,'%description%' => (isset(self::$_options['description']) ? self::$_options['description'] : '')
@@ -774,7 +780,7 @@ EOHTM;
                 	return self::$_result;
 				}
             } else {
-                self::addError('Tmp sub-folder creation error. Job failed');
+                self::addError($_msg['err_tmpdir_create']);
                 return self::$_result;
 			}
         } else {
@@ -818,26 +824,24 @@ EOHTM;
                 $filext = strtolower(substr($pfile['src'], (1+$point)));
                 $body = file_get_contents($src);
 
-                $body = self::$preproc->parse($body, self::$parsvars); # perform #IF .. #ELSE .. #ENDIF #INCLUDE macros
+                $body = self::$preproc->parse($body, self::$parsvars);
 
                 self::$subst['%filename%'] = $dest;
                 $body = str_replace(array_keys(self::$subst), array_values(self::$subst), $body);
 
                 if (isset(self::$_compilers[$fileext])) {
+
                 	self::compileBody($body, $fileext, $pfile['src']);
                 	if (!empty(self::$_compilers[$fileext]['outext']))
                 		$dest = substr($dest, 0, -strlen($fileext)) .self::$_compilers[$fileext]['outext'];
-                		// change file extension
 				}
 
                 self::_saveNewFile($dest, $body);  # file_put_contents($backendFile, $body);
                 self::$_handled[] = $pfile['src'];
-#                unlink($src);
+
             }
         }
-        # 4. process language files if parameter set: <plugin  ... locfiles="strings.{lng}.php" >
-
-        # 5. handle rest files from zip (remaining in tmp fodler)
+        # handle all the rest files from zip or src folder
 	    self::processFolder(self::$_srcRoot, $subFolder);
 	    if (self::$_srctype === 'zip' && $tmpfold)
 	    	self::delTree($tmpfold); # tmp cleanup after job
@@ -846,7 +850,7 @@ EOHTM;
         return self::$_result;
     }
 
-    public static function processFolder($dirFrom, $dirTo) {
+    private static function processFolder($dirFrom, $dirTo) {
 
         $files = array_diff(scandir($dirFrom), array('.','..'));
         foreach($files as $fname) {
@@ -855,18 +859,24 @@ EOHTM;
                 if (is_dir($dirTo . $fname))
                     self::processFolder("$dirFrom/$fname", "$dirTo{$fname}/");
                 else
-                    self::addError("Folder create error: ".$dirTo . $fname);
+                    self::addError(self::$_msg['err_create_folder'] . ' : ' . $dirTo . $fname);
             }
             else {
-                $subjFile = $dirTo . $fname;
-#                WriteDebugInfo('handle ? :', $fname); WriteDebugInfo('handled:', self::$_handled);
+                $destFile = $dirTo . $fname;
                 if (!in_array($fname, self::$_handled)) {
-                	self::processOneFile("$dirFrom/$fname", $subjFile);
+                	self::processOneFile("$dirFrom/$fname", $destFile);
 				}
 			}
         }
     }
-
+	/**
+	* Add a new file extension that should be processed
+	*
+	* @param mixed $ext
+	*/
+    public static function addSourceFileType($ext) {
+    	if (!in_array($ext, self::$TYPES_TXT)) self::$TYPES_TXT[] = $ext;
+	}
     private static function processOneFile($fileSrc, $fileDest) {
 
         self::$_handled[] = $fileDest;
@@ -878,7 +888,6 @@ EOHTM;
 			if (isset(self::$_compilers[$ext])) { # there's a registerd compiler, name changed!
 	            $oldfn = $fileDest;
         		$fileDest = substr($fileDest,0,-strlen($ext)) . self::$_compilers[$ext]['outext'];
-#        		WriteDebugInfo("changed $oldfn to $fileDest");
 			}
 
             self::$subst['%filename%'] = $fileDest;
@@ -902,11 +911,13 @@ EOHTM;
 		$ret =(("$fval" === $par) ? ($par . 'px') : $par);
 		return $ret;
     }
+
 	/**
 	* Perform in-place compilation of source body by one on registered compilers/parsers
 	*
 	* @param mixed $body string containing source code
 	* @param string $type type of compiler (equal to extension of source file: 'scss', 'less' etc.)
+	* @param string $srcname source file name
 	*/
     public static function compileBody(&$body, $type, $srcname) {
 
