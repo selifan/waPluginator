@@ -103,7 +103,7 @@ class WaPluginator {
 			if (is_file($lngFile)) $lang =include($lngFile);
 			else return;
 		}
-    	if (is_array($arr) && count($lang))
+    	if (is_array($lang) && count($lang))
     		self::$_msg = array_merge(self::$_msg, $lang);
 	}
     /**
