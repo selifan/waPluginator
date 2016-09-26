@@ -620,7 +620,7 @@ EOHTM;
         exit($ret);
     }
 
-    private static function setOptions($opts) {
+    public static function setOptions($opts) {
         if (is_array($opts)) self::$_options = $opts;
     }
     private static function generateAll() {
