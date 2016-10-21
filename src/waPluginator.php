@@ -5,9 +5,9 @@
 * Main class module
 * @Author Alexander Selifonov <alex [at] selifan {dot} ru>
 * @link https://github.com/selifan/waPluginator
-* @Version 0.3.072
+* @Version 0.4.073
 * started 2013-01-18
-* modified 2016-09-23
+* modified 2016-10-21
 **/
 class WaPluginator {
 
@@ -91,7 +91,7 @@ class WaPluginator {
     private static $_scheme = array(); // chosen color scheme
     private static $_useSchemes = false;
     private static $_clrsubst = array();
-
+	private static $plgid = '';
 	/**
 	* Set localized interface strings
 	*
@@ -641,7 +641,7 @@ EOHTM;
 
         $tmpfold = false;
 
-        $plg_basename = isset(self::$_p['plg_basename']) ? trim(self::$_p['plg_basename']) : '';
+        self::$plgid = $plg_basename = isset(self::$_p['plg_basename']) ? trim(self::$_p['plg_basename']) : '';
         $template   = isset(self::$_p['template']) ? trim(self::$_p['template']) : '';
         $locls = strtolower($plg_basename);
         $plg_folder = isset(self::$_p['plg_folder']) ? trim(self::$_p['plg_folder']) : '';
@@ -800,6 +800,7 @@ EOHTM;
                     if (!$doit) {
 #                        if (is_file($src)) unlink($src);
                         self::$_handled[] = $pfile['src'];
+#                        WriteDebugInfo("file excluded from work: ", $pfile['src']);
                     	continue;
 					}
                 }
@@ -863,7 +864,8 @@ EOHTM;
             }
             else {
                 $destFile = $dirTo . $fname;
-                if (!in_array($fname, self::$_handled)) {
+                $minPath = substr($dirTo, strlen(self::$FOLDER_OUTPUT)+strlen(self::$plgid)+1);
+                if (!in_array("$minPath{$fname}", self::$_handled)) {
                 	self::processOneFile("$dirFrom/$fname", $destFile);
 				}
 			}
