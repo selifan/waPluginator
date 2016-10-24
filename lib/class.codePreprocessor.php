@@ -3,9 +3,9 @@
 * @name class.codePreprocessor.php
 * Source code parsing / preprocessing engine
 * @Author Alexander Selifonov <alex [at] selifan {dot} ru>
-* @Version 1.0.002
+* @Version 1.1.003
 * @link https://github.com/selifan/CodePreprocessor
-* modified 2015-09-07
+* modified 2016-10-06
 **/
 
 class CodePreprocessor {
@@ -20,12 +20,14 @@ class CodePreprocessor {
       ,'DEFAULT' => '#DEFAULT'
       ,'ENDSWITCH'  => '#ENDSWITCH'
       ,'INCLUDE' => '#INCLUDE'
+      ,'SET' => '#SET'
     );
     protected $_subst_wrappers = array('%','%');
     protected $CRLF = "\n";
     protected $_srcfolder = '';
     protected $_err = array();
-
+	private   $_vars = array();
+	private   $_evalError = '';
     protected $_tokens = 0;
 
     public function __construct() {
@@ -77,9 +79,10 @@ class CodePreprocessor {
     * @param mixed $vars assoc.array, user defined pairs "key" => value
     * @param mixed $subst TRUE or assoc.array to turn ON "substitute" mode, @since 1.0.002
     */
-    public function parse($src, $vars=array(), $subst=FALSE) {
+    public function parse($src, $vars = array(), $subst=FALSE) {
 
         $ar_subst = $substs = FALSE;
+        $this->_vars = $vars;
         if ($subst) {
             $ar_subst = is_array($subst) ? $subst : $vars;
             $substs = array();
@@ -116,25 +119,36 @@ class CodePreprocessor {
             $iflevel++;
             if(count($this->_tokens)<2) $value = FALSE;
             else {
-
-                $var_name = $this->_tokens[1];
-                $ifstate[$iflevel] = $ifdone[$iflevel] = $this->_evaluateParams($vars);
+				$expr = self::_dropFirstToken($srcline);
+                $evaled = $this->_evalExpression($expr);
+                if ($evaled === null) {
+                	$this->_err[] = "Line ".($lineno+1).": Wrong IF expresion, ".$this->_evalError;
+                	$evaled = false;
+				}
+                $ifstate[$iflevel] = $ifdone[$iflevel] = $evaled;
                 $ifbranch[$iflevel] = 'if';
             }
           }
           elseif($lcmd === 'ELSEIF') {
-
+		  	$expr = self::_dropFirstToken($srcline);
             $b_logic = TRUE;
 
             if($iflevel>0 && ($ifbranch[$iflevel]==="if" || $ifbranch[$iflevel] === "elseif")) {
               if($ifdone[$iflevel]) { $ifstate[$iflevel] = FALSE; }
               elseif ( count($this->_tokens)<2 ) $ifstate[$iflevel] = FALSE;
-              else $ifstate[$iflevel] = $this->_evaluateParams($vars);
+              else {
+			      $evaled = $this->_evalExpression($expr);
+			      if ($evaled === null) {
+                  	  $this->_err[] = "Line ".($lineno+1).": Wrong ELSEIF expresion, ".$this->_evalError;
+			      	  $evaled = false;
+				  }
+              	  $ifstate[$iflevel] = $evaled;
+			  }
 
               $ifbranch[$iflevel] = 'elseif';
               if($ifstate[$iflevel]) $ifdone[$iflevel] = TRUE;
             }
-            else $this->_err[] = "Line ".($lineno+1).": Wrong #ELSEIF";
+            else $this->_err[] = "Line ".($lineno+1).": #ELSEIF without respective #IF,#ELSE";
           }
           elseif ($lcmd === 'ELSE') {
 
@@ -202,9 +216,37 @@ class CodePreprocessor {
                . $this->_srcfolder . $this->_tokens[1];
             continue;
           }
+          elseif ($lcmd === 'SET') {
+		  	 $evalString = trim(substr(ltrim($srcline),4));
+			 $eqpos = strpos($evalString, '=');
+			 if ($eqpos > 0) {
+			 	 $newvar = trim(substr($evalString,0,$eqpos));
+			 	 $expression = trim(substr($evalString,$eqpos+1));
+
+			 	 if ($newvar =='') {
+			 	 	 $this->_err[] = "Line ".($lineno+1). " - SET empty var name";
+			 	 	 continue;
+				 }
+				 $evaled = $this->_evalExpression($expression);
+				 if ($evaled === null) {
+   				 	$this->_err[] = "Line ".($lineno+1) . ' SET expression error,' . $this->_evalError;
+   				 	continue;
+				 }
+
+#			 	 $output[] = "NEW var: $newvar, expression: $expression";
+
+			 	 $this->_vars[$newvar] = $evaled;
+			 	 $substs[$this->_subst_wrappers[0] . $newvar . $this->_subst_wrappers[1]] = $evaled;
+#		 	 	 $output[] = "// New var calculated: $newvar = $evaled";
+
+			 }
+			 else $this->_err[] = "Wrong SET operator: must be 'varname = {expression}'";
+#          	  WriteDebugInfo('SET operator,rest line :',$evalString);
+			  continue;
+		  }
 
           if ( !$b_logic && $this->_isLineActive($ifstate ,$iflevel) ) {
-              if ($substs) $srcline = str_replace(array_keys($substs), array_values($substs), $srcline);
+              if ($substs) $srcline = strtr($srcline, $substs);
               $output[] = rtrim($srcline);
           }
 
@@ -212,6 +254,32 @@ class CodePreprocessor {
 
         return implode($this->CRLF, $output);
     }
+
+	private static function _dropFirstToken($strg) {
+		$ret = trim($strg);
+		while (!in_array(substr($ret,0,1), array(' ',"\t")) && !empty($ret)) {
+			$ret = substr($ret,1);
+		}
+		return ltrim($ret);
+	}
+
+    private function _evalExpression($exprstring) {
+
+		$result = null;
+		$this->_evalError = '';
+		foreach($this->_vars as $key=>$val) {
+			$realvar = is_numeric($val) ? $val : "'$val'";
+    		$exprstring = preg_replace('/\b'.$key.'\b/i', $realvar, $exprstring);
+		}
+		$__my__ = null;
+	 	try {
+			eval("\$__my__ = $exprstring;");
+			$result = $__my__;
+		} catch(Exception $e) {
+   			$this->_evalError = "Bad expression, " . $e->getMessage();
+		}
+		return $result;
+	}
     # evaluate vars list after operator
     private function _evaluateParams($vars) {
 
